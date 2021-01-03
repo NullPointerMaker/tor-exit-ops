@@ -1,0 +1,42 @@
+#!/bin/bash
+cd `dirname ${BASH_SOURCE}`
+function doTest {
+	ip=`curl -s -x socks5h://127.0.0.1:9050 http://members.3322.org/dyndns/getip`
+	if [ $ip ] ; then
+		grep -l $ip ip-valid.txt
+		if [ $? -ne 0 ] ; then
+			echo $ip is valid
+			echo $ip >> ip-valid.txt
+	#		echo -e "$ip,\c" >> ip-valid.txt
+		fi
+		sleep 600
+		doTest
+	else
+		ip=`curl -s -x socks5h://127.0.0.1:9050 http://checkip.amazonaws.com`
+		if [ $ip ] ; then
+			grep -l $ip ip-invalid.txt
+			if [ $? -eq 0 ] ; then
+				echo $ip is already invalid
+				doRestart
+			else
+				echo $ip is invalid
+				echo $ip >> ip-invalid.txt
+				sed -i "s/^ExcludeExitNodes .*/&,$ip/" /etc/tor/torrc
+			fi
+		else
+			echo tor error
+		fi
+		doReload
+	fi
+}
+function doReload {
+	service tor reload
+	sleep 60
+	doTest
+}
+function doRestart {
+	service tor restart
+	sleep 60
+	doTest
+}
+doTest

@@ -1,0 +1,32 @@
+#!/bin/bash
+cd `dirname ${BASH_SOURCE}`
+function doTest {
+	ip=`curl -s -x socks5h://127.0.0.1:9150 http://members.3322.org/dyndns/getip`
+	if [ $ip ] ; then #国内可访问
+		grep -l $ip ip-valid.txt
+		if [ $? -ne 0 ] ; then #没有被记录过
+			echo $ip is valid
+			echo $ip >> ip-valid.txt
+#			echo -e "$ip,\c" >> ip-valid.txt
+			sed -i "s/^ExcludeExitNodes .*/&,$ip/" ./9150/torrc
+			sed -i "s/^ExitNodes .*/&,$ip/" /etc/tor/torrc
+			service tor reload
+		fi
+	else #国内不可访问或连接失败
+		ip=`curl -s -x socks5h://127.0.0.1:9150 http://checkip.amazonaws.com`
+		if [ $ip ] ; then #国内不可访问
+			grep -l $ip ./9150/torrc
+			if [ $? -ne 0 ] ; then #没有被记录过
+				echo $ip is invalid
+				echo $ip >> ip-invalid.txt
+				sed -i "s/^ExcludeExitNodes .*/&,$ip/" ./9150/torrc
+			fi
+		else
+			echo tor error
+		fi
+	fi
+	bash ./9150/tor.bash restart
+	sleep 60
+	doTest
+}
+doTest
